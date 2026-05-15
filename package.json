@@ -6,6 +6,6 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "ws": "^8.17.0"
+    "peer": "^2.0.0"
   }
 }
