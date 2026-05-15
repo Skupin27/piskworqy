@@ -506,28 +506,21 @@
 </div>
 
 <script>
-// ===================== CONFIGURATION =====================
-// Change this to your server's address and port.
-// If using wss:// (HTTPS), update server.php to use TLS or put Nginx in front.
-// Replace with your Render service URL (wss:// because Render uses HTTPS)
-const SIGNAL_SERVER = 'wss://piskworqy.onrender.com';
-
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script>
 // ===================== STATE =====================
-let sigWs = null;          // WebSocket to PHP signaling server
-let rtcConn = null;        // RTCPeerConnection
-let dataChannel = null;    // RTCDataChannel (game traffic)
-let myRole = null;         // 'X' or 'O'
+let myPeer = null;
+let myConn = null;
+let myRole = null;
 let isHost = false;
 let selectedGame = 'ttt';
 let selectedMode = 'host';
-let currentGame = null;
 let gameOver = false;
 let rematchVote = false;
 
-const ICE_SERVERS = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' }
-];
+const PEER_HOST = 'piskworqy.onrender.com';
+const PEER_PATH = '/peerjs';
+const PEER_PORT = 443;
 
 // ===================== UI HELPERS =====================
 function show(id) {
@@ -551,212 +544,103 @@ function selectMode(mode, btn) {
 }
 
 function hostStartGame() {
-  if (!dataChannel || dataChannel.readyState !== 'open') {
+  if (!myConn || !myConn.open) {
     document.getElementById('host-status').textContent = 'No opponent connected yet.';
     return;
   }
-  // Tell PHP server to relay game start to guest
-  sigSend({ type: 'start_game', game: selectedGame });
+  send({ type: 'start_game', game: selectedGame });
   startGame('X', selectedGame);
 }
 
-// ===================== SIGNALING (PHP WebSocket) =====================
-function sigSend(obj) {
-  if (sigWs && sigWs.readyState === WebSocket.OPEN) {
-    sigWs.send(JSON.stringify(obj));
-  }
+// ===================== PEERJS =====================
+function newPeer() {
+  return new Peer({
+    host: PEER_HOST,
+    path: PEER_PATH,
+    port: PEER_PORT,
+    secure: true,
+  });
 }
 
-function connectSignaling(onOpen) {
-  if (sigWs) { try { sigWs.close(); } catch(e){} sigWs = null; }
-  sigWs = new WebSocket(SIGNAL_SERVER);
-
-  sigWs.onopen = () => { if (onOpen) onOpen(); };
-
-  sigWs.onmessage = async (evt) => {
-    const msg = JSON.parse(evt.data);
-    await handleSignal(msg);
-  };
-
-  sigWs.onerror = () => {
-    document.getElementById('host-status').textContent = 'Cannot reach signaling server.';
-    document.getElementById('join-error').textContent = 'Cannot reach signaling server.';
-  };
-
-  sigWs.onclose = () => {
-    console.log('Signaling WS closed');
-  };
+function send(msg) {
+  if (myConn && myConn.open) myConn.send(msg);
 }
 
-async function handleSignal(msg) {
-  switch (msg.type) {
-
-    case 'created':
-      // Host: room created, show code
-      document.getElementById('host-code').textContent = msg.code;
-      document.getElementById('host-status').textContent = 'Waiting for opponent…';
-      break;
-
-    case 'guest_joined':
-      // Host: a guest connected — create RTCPeerConnection and offer
-      document.getElementById('host-status').textContent = 'Opponent connected — establishing P2P…';
-      await createHostRTC();
-      break;
-
-    case 'joined':
-      // Guest: joined room — create RTCPeerConnection ready for offer
-      document.getElementById('join-btn').textContent = 'Connected!';
-      document.querySelector('#join-panel .card').style.display = 'none';
-      document.getElementById('join-waiting').style.display = 'block';
-      await createGuestRTC();
-      break;
-
-    case 'signal':
-      // WebRTC signal relay (offer, answer, ICE)
-      await handleRTCSignal(msg.payload);
-      break;
-
-    case 'start_game':
-      // Guest receives game start from host
-      startGame('O', msg.game);
-      break;
-
-    case 'peer_left':
-      document.getElementById('game-status').textContent = 'Opponent disconnected.';
-      gameOver = true;
-      break;
-
-    case 'error':
-      document.getElementById('join-error').textContent = msg.reason || 'Server error.';
-      document.getElementById('join-btn').disabled = false;
-      document.getElementById('join-btn').textContent = 'Connect';
-      break;
-  }
-}
-
-// ===================== WebRTC =====================
-function createRTCBase() {
-  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-
-  pc.onicecandidate = (e) => {
-    if (e.candidate) {
-      sigSend({ type: 'signal', payload: { ice: e.candidate } });
-    }
-  };
-
-  pc.onconnectionstatechange = () => {
-    if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-      document.getElementById('game-status').textContent = 'Connection lost.';
-      gameOver = true;
-    }
-  };
-
-  return pc;
-}
-
-async function createHostRTC() {
-  rtcConn = createRTCBase();
-
-  dataChannel = rtcConn.createDataChannel('game', { ordered: true });
-  setupDataChannel(dataChannel);
-
-  const offer = await rtcConn.createOffer();
-  await rtcConn.setLocalDescription(offer);
-  sigSend({ type: 'signal', payload: { sdp: rtcConn.localDescription } });
-}
-
-async function createGuestRTC() {
-  rtcConn = createRTCBase();
-
-  rtcConn.ondatachannel = (e) => {
-    dataChannel = e.channel;
-    setupDataChannel(dataChannel);
-  };
-}
-
-async function handleRTCSignal(payload) {
-  if (!rtcConn) return;
-
-  if (payload.sdp) {
-    await rtcConn.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-    if (payload.sdp.type === 'offer') {
-      // Guest answers
-      const answer = await rtcConn.createAnswer();
-      await rtcConn.setLocalDescription(answer);
-      sigSend({ type: 'signal', payload: { sdp: rtcConn.localDescription } });
-    }
-  }
-
-  if (payload.ice) {
-    try { await rtcConn.addIceCandidate(new RTCIceCandidate(payload.ice)); } catch(e) {}
-  }
-}
-
-function setupDataChannel(dc) {
-  dc.onopen = () => {
-    console.log('Data channel open');
-    if (isHost) {
-      document.getElementById('host-status').textContent = 'Opponent connected!';
-      document.getElementById('host-game-picker').style.display = 'block';
-    }
-  };
-
-  dc.onmessage = (e) => {
-    const msg = JSON.parse(e.data);
-    handleGameMessage(msg);
-  };
-
-  dc.onclose = () => {
+function setupConn(conn) {
+  myConn = conn;
+  conn.on('data', handleGameMessage);
+  conn.on('close', () => {
     document.getElementById('game-status').textContent = 'Opponent disconnected.';
     gameOver = true;
-  };
-}
-
-// Send game data directly via WebRTC data channel (no server involvement)
-function send(msg) {
-  if (dataChannel && dataChannel.readyState === 'open') {
-    dataChannel.send(JSON.stringify(msg));
-  }
+  });
+  conn.on('error', (e) => console.error('conn error', e));
 }
 
 // ===================== HOST INIT =====================
 function initHost() {
   isHost = true;
-  closeRTC();
+  if (myPeer) { myPeer.destroy(); myPeer = null; }
   document.getElementById('host-code').innerHTML = '<span class="spinner"></span>generating...';
-  document.getElementById('host-status').textContent = 'Connecting to server…';
+  document.getElementById('host-status').textContent = 'Connecting…';
   document.getElementById('host-game-picker').style.display = 'none';
 
-  connectSignaling(() => {
-    sigSend({ type: 'create' });
+  myPeer = newPeer();
+
+  myPeer.on('open', (id) => {
+    document.getElementById('host-code').textContent = id;
+    document.getElementById('host-status').textContent = 'Waiting for opponent…';
+  });
+
+  myPeer.on('connection', (conn) => {
+    setupConn(conn);
+    conn.on('open', () => {
+      document.getElementById('host-status').textContent = 'Opponent connected!';
+      document.getElementById('host-game-picker').style.display = 'block';
+    });
+  });
+
+  myPeer.on('error', (e) => {
+    document.getElementById('host-status').textContent = 'Error: ' + e.type;
   });
 }
 
 // ===================== JOIN ROOM =====================
 function joinRoom() {
-  const code = document.getElementById('join-code-input').value.trim().toUpperCase();
-  if (code.length < 4) { document.getElementById('join-error').textContent = 'Enter a valid room code.'; return; }
+  const code = document.getElementById('join-code-input').value.trim();
+  if (!code) { document.getElementById('join-error').textContent = 'Enter a room code.'; return; }
   document.getElementById('join-error').textContent = '';
   document.getElementById('join-btn').disabled = true;
   document.getElementById('join-btn').textContent = 'Connecting…';
 
   isHost = false;
-  closeRTC();
+  if (myPeer) { myPeer.destroy(); myPeer = null; }
 
-  connectSignaling(() => {
-    sigSend({ type: 'join', code });
+  myPeer = newPeer();
+
+  myPeer.on('open', () => {
+    const conn = myPeer.connect(code, { reliable: true });
+    setupConn(conn);
+    conn.on('open', () => {
+      document.querySelector('#join-panel .card').style.display = 'none';
+      document.getElementById('join-waiting').style.display = 'block';
+    });
+  });
+
+  myPeer.on('error', (e) => {
+    document.getElementById('join-error').textContent = 'Error: ' + e.type;
+    document.getElementById('join-btn').disabled = false;
+    document.getElementById('join-btn').textContent = 'Connect';
   });
 }
 
-function closeRTC() {
-  if (dataChannel) { try { dataChannel.close(); } catch(e){} dataChannel = null; }
-  if (rtcConn) { try { rtcConn.close(); } catch(e){} rtcConn = null; }
-}
-
-// ===================== GAME MESSAGES (over WebRTC) =====================
+// ===================== GAME MESSAGES =====================
 function handleGameMessage(msg) {
   if (msg.type === 'move') {
-    applyMove(msg, false);
+    applyMove(msg);
+  } else if (msg.type === 'start_game') {
+    startGame('O', msg.game);
+  } else if (msg.type === 'start') {
+    startGame(msg.role, msg.game);
   } else if (msg.type === 'rematch') {
     rematchVote = true;
     document.getElementById('result-text').textContent += ' (rematch accepted)';
@@ -765,8 +649,6 @@ function handleGameMessage(msg) {
       send({ type: 'start', role: myRole, game: selectedGame });
       startGame(newRole, selectedGame);
     }, 300);
-  } else if (msg.type === 'start') {
-    startGame(msg.role, msg.game);
   }
 }
 
@@ -785,16 +667,12 @@ function startGame(role, game) {
 
   ['ttt-area','gomoku-area','uttt-area'].forEach(id => document.getElementById(id).style.display = 'none');
 
-  if (game === 'ttt') { document.getElementById('ttt-area').style.display = 'block'; initTTT(); }
+  if (game === 'ttt')    { document.getElementById('ttt-area').style.display    = 'block'; initTTT(); }
   if (game === 'gomoku') { document.getElementById('gomoku-area').style.display = 'block'; initGomoku(); }
-  if (game === 'uttt') { document.getElementById('uttt-area').style.display = 'block'; initUTTT(); }
+  if (game === 'uttt')   { document.getElementById('uttt-area').style.display   = 'block'; initUTTT(); }
 
   show('game-screen');
   updateTurn('X');
-
-  if (role === 'X') {
-    send({ type: 'start', role: 'O', game: game });
-  }
 }
 
 function updateTurn(turn) {
@@ -803,7 +681,6 @@ function updateTurn(turn) {
   const mark = turn === 'X' ? '✕' : '○';
   const cls = turn === 'X' ? 'x-mark' : 'o-mark';
   ti.innerHTML = `<span class="${cls}">${mark}</span> ${mine ? "Your turn" : "Opponent's turn"}`;
-
   document.getElementById('badge-x').classList.toggle('active-badge', turn === 'X');
   document.getElementById('badge-o').classList.toggle('active-badge', turn === 'O');
   document.getElementById('game-status').textContent = '';
@@ -825,12 +702,12 @@ function requestRematch() {
 }
 
 function leaveGame() {
-  closeRTC();
-  if (sigWs) { try { sigWs.close(); } catch(e){} sigWs = null; }
+  if (myConn) { myConn.close(); myConn = null; }
+  if (myPeer) { myPeer.destroy(); myPeer = null; }
 
   myRole = null;
   document.getElementById('host-code').innerHTML = '<span class="spinner"></span>generating...';
-  document.getElementById('host-status').textContent = 'Connecting to server…';
+  document.getElementById('host-status').textContent = 'Connecting…';
   document.getElementById('host-game-picker').style.display = 'none';
   document.getElementById('join-code-input').value = '';
   document.getElementById('join-btn').disabled = false;
