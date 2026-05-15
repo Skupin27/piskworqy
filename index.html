@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BOARD GAMES</title>
+<script src="aib.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@200;400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f5f4f0;
+    --surface: #ffffff;
+    --border: #dddbd4;
+    --text: #1a1917;
+    --muted: #888680;
+    --accent: #1a1917;
+    --x-color: #c0392b;
+    --o-color: #2471a3;
+    --highlight: #f0ede4;
+    --win-bg: #eafaf1;
+    --win-border: #27ae60;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  header {
+    width: 100%;
+    padding: 2rem 2rem 1rem;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+
+  header h1 {
+    font-family: 'DM Mono', monospace;
+    font-weight: 300;
+    font-size: 1.1rem;
+    letter-spacing: 0.3em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .screen { display: none; width: 100%; max-width: 520px; padding: 0 1.5rem 3rem; }
+  .screen.active { display: block; }
+
+  .section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.75rem;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .game-choices { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 1.5rem; }
+  .game-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 1rem 0.5rem;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.15s, background 0.15s;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .game-btn:hover { border-color: var(--text); }
+  .game-btn.selected { border-color: var(--text); background: var(--highlight); }
+  .game-btn .gname { font-size: 0.75rem; font-weight: 500; display: block; margin-top: 0.4rem; }
+  .game-btn .gicon { font-size: 1.6rem; display: block; }
+
+  .mode-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.5rem; }
+  .mode-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 1.25rem 1rem;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.15s, background 0.15s;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .mode-btn:hover { border-color: var(--text); }
+  .mode-btn.selected { border-color: var(--text); background: var(--highlight); }
+  .mode-btn .mname { font-size: 0.85rem; font-weight: 500; }
+  .mode-btn .mdesc { font-size: 0.7rem; color: var(--muted); margin-top: 0.2rem; }
+
+  input[type="text"] {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 0.7rem 0.9rem;
+    font-family: 'DM Mono', monospace;
+    font-size: 1rem;
+    background: var(--surface);
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  input[type="text"]:focus { border-color: var(--text); }
+
+  button.primary {
+    width: 100%;
+    background: var(--text);
+    color: #fff;
+    border: none;
+    border-radius: 2px;
+    padding: 0.75rem 1rem;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.8rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    cursor: pointer;
+    margin-top: 0.75rem;
+    transition: opacity 0.15s;
+  }
+  button.primary:hover { opacity: 0.8; }
+  button.primary:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  button.secondary {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 0.6rem 1rem;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    cursor: pointer;
+    color: var(--muted);
+    transition: border-color 0.15s, color 0.15s;
+  }
+  button.secondary:hover { border-color: var(--text); color: var(--text); }
+
+  .room-code-display {
+    font-family: 'DM Mono', monospace;
+    font-size: 2rem;
+    font-weight: 300;
+    letter-spacing: 0.3em;
+    text-align: center;
+    padding: 1.5rem;
+    border: 1px dashed var(--border);
+    border-radius: 2px;
+    margin: 1rem 0;
+    color: var(--text);
+  }
+
+  .status-line {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-align: center;
+    margin: 0.75rem 0;
+  }
+
+  .status-line.ok { color: #27ae60; }
+  .status-line.err { color: #c0392b; }
+
+  /* GAME SCREEN */
+  #game-screen { max-width: 700px; }
+
+  .game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .turn-indicator {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+  }
+
+  .turn-indicator span {
+    font-weight: 500;
+  }
+
+  .turn-indicator .x-mark { color: var(--x-color); }
+  .turn-indicator .o-mark { color: var(--o-color); }
+
+  /* Classic TicTacToe */
+  .ttt-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 3px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    max-width: 300px;
+    margin: 0 auto 1.5rem;
+  }
+
+  .ttt-cell {
+    background: var(--surface);
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 2.5rem;
+    font-weight: 300;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .ttt-cell:hover:not(.filled) { background: var(--highlight); }
+  .ttt-cell.filled { cursor: default; }
+  .ttt-cell.x-cell { color: var(--x-color); }
+  .ttt-cell.o-cell { color: var(--o-color); }
+  .ttt-cell.win-cell { background: var(--win-bg); }
+
+  /* Gomoku */
+  .gomoku-wrap {
+    overflow-x: auto;
+    margin: 0 auto 1.5rem;
+    display: flex;
+    justify-content: center;
+  }
+
+  #gomoku-canvas {
+    cursor: crosshair;
+    display: block;
+  }
+
+  /* Ultimate TTT */
+  .uttt-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    background: var(--border);
+    border: 2px solid var(--border);
+    max-width: 450px;
+    margin: 0 auto 1.5rem;
+    padding: 3px;
+  }
+
+  .uttt-board {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 3px;
+    transition: background 0.2s;
+  }
+
+  .uttt-board.active-board { background: #fff9e6; border-color: #e0c060; }
+  .uttt-board.won-x { background: #fdecea; border-color: var(--x-color); }
+  .uttt-board.won-o { background: #eaf2fb; border-color: var(--o-color); }
+  .uttt-board.drawn { background: var(--highlight); }
+
+  .uttt-inner {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    background: var(--border);
+  }
+
+  .uttt-cell {
+    background: var(--surface);
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.85rem;
+    font-weight: 400;
+    cursor: pointer;
+    transition: background 0.1s;
+    min-height: 28px;
+  }
+
+  .uttt-cell:hover:not(.filled):not(.locked) { background: var(--highlight); }
+  .uttt-cell.filled, .uttt-cell.locked { cursor: default; }
+  .uttt-cell.x-cell { color: var(--x-color); }
+  .uttt-cell.o-cell { color: var(--o-color); }
+
+  .uttt-board-won-symbol {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 2.5rem;
+    font-weight: 300;
+    aspect-ratio: 1;
+  }
+
+  .result-banner {
+    text-align: center;
+    padding: 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    background: var(--surface);
+    margin-bottom: 1rem;
+  }
+
+  .result-banner .result-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .result-banner .result-value {
+    font-family: 'DM Mono', monospace;
+    font-size: 1.5rem;
+    font-weight: 300;
+    letter-spacing: 0.1em;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
+
+  .btn-row button { flex: 1; }
+
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 1.25rem 0;
+  }
+
+  .player-badges {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .player-badge {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 0.6rem 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+  }
+
+  .player-badge .badge-mark { font-size: 1.1rem; }
+  .player-badge .badge-role { color: var(--muted); font-size: 0.65rem; }
+  .player-badge.active-badge { border-color: var(--text); background: var(--highlight); }
+
+  .error-msg {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--x-color);
+    margin-top: 0.5rem;
+    letter-spacing: 0.05em;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid var(--border);
+    border-top-color: var(--muted);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Board Games</h1>
+</header>
+
+<!-- LOBBY SCREEN -->
+<div id="lobby-screen" class="screen active">
+  <div class="section-label">Multiplayer</div>
+  <div class="mode-choices">
+    <button class="mode-btn selected" data-mode="host" onclick="selectMode('host', this)">
+      <div class="mname">Create room</div>
+      <div class="mdesc">Host a game, share code</div>
+    </button>
+    <button class="mode-btn" data-mode="join" onclick="selectMode('join', this)">
+      <div class="mname">Join room</div>
+      <div class="mdesc">Enter a room code</div>
+    </button>
+  </div>
+
+  <div id="host-panel">
+    <div class="card">
+      <div class="section-label">Your room code</div>
+      <div class="room-code-display" id="host-code"><span class="spinner"></span>generating...</div>
+      <div class="status-line" id="host-status">Connecting to server…</div>
+    </div>
+    <div id="host-game-picker" style="display:none">
+      <div class="section-label">Choose game</div>
+      <div class="game-choices">
+        <button class="game-btn selected" data-game="ttt" onclick="selectGame('ttt', this)">
+          <span class="gicon">✕ ○</span>
+          <span class="gname">Tic-Tac-Toe</span>
+        </button>
+        <button class="game-btn" data-game="gomoku" onclick="selectGame('gomoku', this)">
+          <span class="gicon">⬤</span>
+          <span class="gname">Gomoku</span>
+        </button>
+        <button class="game-btn" data-game="uttt" onclick="selectGame('uttt', this)">
+          <span class="gicon">⊞</span>
+          <span class="gname">Ultimate TTT</span>
+        </button>
+      </div>
+      <button class="primary" onclick="hostStartGame()">Start Game</button>
+    </div>
+  </div>
+
+  <div id="join-panel" style="display:none">
+    <div class="card">
+      <div class="section-label">Enter room code</div>
+      <input type="text" id="join-code-input" placeholder="ABC123" maxlength="8" spellcheck="false">
+      <div class="error-msg" id="join-error"></div>
+      <button class="primary" id="join-btn" onclick="joinRoom()">Connect</button>
+    </div>
+    <div id="join-waiting" style="display:none">
+      <div class="status-line">Connected — waiting for host to choose a game…</div>
+    </div>
+  </div>
+</div>
+
+<!-- GAME SCREEN -->
+<div id="game-screen" class="screen">
+  <div class="game-header">
+    <div>
+      <div class="section-label" id="game-title-label">Tic-Tac-Toe</div>
+      <div class="turn-indicator" id="turn-indicator">—</div>
+    </div>
+    <button class="secondary" onclick="leaveGame()">Leave</button>
+  </div>
+
+  <div class="player-badges">
+    <div class="player-badge" id="badge-x">
+      <span class="badge-mark x-cell">✕</span>
+      <div>
+        <div>X</div>
+        <div class="badge-role" id="badge-x-role">—</div>
+      </div>
+    </div>
+    <div class="player-badge" id="badge-o">
+      <span class="badge-mark o-cell">○</span>
+      <div>
+        <div>O</div>
+        <div class="badge-role" id="badge-o-role">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="result-area" style="display:none">
+    <div class="result-banner">
+      <div class="result-title">Result</div>
+      <div class="result-value" id="result-text">—</div>
+    </div>
+    <div class="btn-row">
+      <button class="secondary" onclick="leaveGame()">Leave room</button>
+      <button class="primary" id="rematch-btn" onclick="requestRematch()">Rematch</button>
+    </div>
+  </div>
+
+  <!-- Classic TTT -->
+  <div id="ttt-area" style="display:none">
+    <div class="ttt-grid" id="ttt-grid"></div>
+  </div>
+
+  <!-- Gomoku -->
+  <div id="gomoku-area" style="display:none">
+    <div class="gomoku-wrap">
+      <canvas id="gomoku-canvas" width="450" height="450"></canvas>
+    </div>
+  </div>
+
+  <!-- Ultimate TTT -->
+  <div id="uttt-area" style="display:none">
+    <div class="uttt-grid" id="uttt-grid"></div>
+  </div>
+
+  <div class="status-line" id="game-status"></div>
+</div>
+
+<script>
+// ===================== CONFIGURATION =====================
+// Change this to your server's address and port.
+// If using wss:// (HTTPS), update server.php to use TLS or put Nginx in front.
+// Replace with your Render service URL (wss:// because Render uses HTTPS)
+const SIGNAL_SERVER = 'wss://YOUR-APP-NAME.onrender.com';
+
+// ===================== STATE =====================
+let sigWs = null;          // WebSocket to PHP signaling server
+let rtcConn = null;        // RTCPeerConnection
+let dataChannel = null;    // RTCDataChannel (game traffic)
+let myRole = null;         // 'X' or 'O'
+let isHost = false;
+let selectedGame = 'ttt';
+let selectedMode = 'host';
+let currentGame = null;
+let gameOver = false;
+let rematchVote = false;
+
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' }
+];
+
+// ===================== UI HELPERS =====================
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function selectGame(game, btn) {
+  selectedGame = game;
+  document.querySelectorAll('.game-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+
+function selectMode(mode, btn) {
+  selectedMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  document.getElementById('host-panel').style.display = mode === 'host' ? 'block' : 'none';
+  document.getElementById('join-panel').style.display = mode === 'join' ? 'block' : 'none';
+  if (mode === 'host') initHost();
+}
+
+function hostStartGame() {
+  if (!dataChannel || dataChannel.readyState !== 'open') {
+    document.getElementById('host-status').textContent = 'No opponent connected yet.';
+    return;
+  }
+  // Tell PHP server to relay game start to guest
+  sigSend({ type: 'start_game', game: selectedGame });
+  startGame('X', selectedGame);
+}
+
+// ===================== SIGNALING (PHP WebSocket) =====================
+function sigSend(obj) {
+  if (sigWs && sigWs.readyState === WebSocket.OPEN) {
+    sigWs.send(JSON.stringify(obj));
+  }
+}
+
+function connectSignaling(onOpen) {
+  if (sigWs) { try { sigWs.close(); } catch(e){} sigWs = null; }
+  sigWs = new WebSocket(SIGNAL_SERVER);
+
+  sigWs.onopen = () => { if (onOpen) onOpen(); };
+
+  sigWs.onmessage = async (evt) => {
+    const msg = JSON.parse(evt.data);
+    await handleSignal(msg);
+  };
+
+  sigWs.onerror = () => {
+    document.getElementById('host-status').textContent = 'Cannot reach signaling server.';
+    document.getElementById('join-error').textContent = 'Cannot reach signaling server.';
+  };
+
+  sigWs.onclose = () => {
+    console.log('Signaling WS closed');
+  };
+}
+
+async function handleSignal(msg) {
+  switch (msg.type) {
+
+    case 'created':
+      // Host: room created, show code
+      document.getElementById('host-code').textContent = msg.code;
+      document.getElementById('host-status').textContent = 'Waiting for opponent…';
+      break;
+
+    case 'guest_joined':
+      // Host: a guest connected — create RTCPeerConnection and offer
+      document.getElementById('host-status').textContent = 'Opponent connected — establishing P2P…';
+      await createHostRTC();
+      break;
+
+    case 'joined':
+      // Guest: joined room — create RTCPeerConnection ready for offer
+      document.getElementById('join-btn').textContent = 'Connected!';
+      document.querySelector('#join-panel .card').style.display = 'none';
+      document.getElementById('join-waiting').style.display = 'block';
+      await createGuestRTC();
+      break;
+
+    case 'signal':
+      // WebRTC signal relay (offer, answer, ICE)
+      await handleRTCSignal(msg.payload);
+      break;
+
+    case 'start_game':
+      // Guest receives game start from host
+      startGame('O', msg.game);
+      break;
+
+    case 'peer_left':
+      document.getElementById('game-status').textContent = 'Opponent disconnected.';
+      gameOver = true;
+      break;
+
+    case 'error':
+      document.getElementById('join-error').textContent = msg.reason || 'Server error.';
+      document.getElementById('join-btn').disabled = false;
+      document.getElementById('join-btn').textContent = 'Connect';
+      break;
+  }
+}
+
+// ===================== WebRTC =====================
+function createRTCBase() {
+  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+  pc.onicecandidate = (e) => {
+    if (e.candidate) {
+      sigSend({ type: 'signal', payload: { ice: e.candidate } });
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+      document.getElementById('game-status').textContent = 'Connection lost.';
+      gameOver = true;
+    }
+  };
+
+  return pc;
+}
+
+async function createHostRTC() {
+  rtcConn = createRTCBase();
+
+  dataChannel = rtcConn.createDataChannel('game', { ordered: true });
+  setupDataChannel(dataChannel);
+
+  const offer = await rtcConn.createOffer();
+  await rtcConn.setLocalDescription(offer);
+  sigSend({ type: 'signal', payload: { sdp: rtcConn.localDescription } });
+}
+
+async function createGuestRTC() {
+  rtcConn = createRTCBase();
+
+  rtcConn.ondatachannel = (e) => {
+    dataChannel = e.channel;
+    setupDataChannel(dataChannel);
+  };
+}
+
+async function handleRTCSignal(payload) {
+  if (!rtcConn) return;
+
+  if (payload.sdp) {
+    await rtcConn.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+    if (payload.sdp.type === 'offer') {
+      // Guest answers
+      const answer = await rtcConn.createAnswer();
+      await rtcConn.setLocalDescription(answer);
+      sigSend({ type: 'signal', payload: { sdp: rtcConn.localDescription } });
+    }
+  }
+
+  if (payload.ice) {
+    try { await rtcConn.addIceCandidate(new RTCIceCandidate(payload.ice)); } catch(e) {}
+  }
+}
+
+function setupDataChannel(dc) {
+  dc.onopen = () => {
+    console.log('Data channel open');
+    if (isHost) {
+      document.getElementById('host-status').textContent = 'Opponent connected!';
+      document.getElementById('host-game-picker').style.display = 'block';
+    }
+  };
+
+  dc.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    handleGameMessage(msg);
+  };
+
+  dc.onclose = () => {
+    document.getElementById('game-status').textContent = 'Opponent disconnected.';
+    gameOver = true;
+  };
+}
+
+// Send game data directly via WebRTC data channel (no server involvement)
+function send(msg) {
+  if (dataChannel && dataChannel.readyState === 'open') {
+    dataChannel.send(JSON.stringify(msg));
+  }
+}
+
+// ===================== HOST INIT =====================
+function initHost() {
+  isHost = true;
+  closeRTC();
+  document.getElementById('host-code').innerHTML = '<span class="spinner"></span>generating...';
+  document.getElementById('host-status').textContent = 'Connecting to server…';
+  document.getElementById('host-game-picker').style.display = 'none';
+
+  connectSignaling(() => {
+    sigSend({ type: 'create' });
+  });
+}
+
+// ===================== JOIN ROOM =====================
+function joinRoom() {
+  const code = document.getElementById('join-code-input').value.trim().toUpperCase();
+  if (code.length < 4) { document.getElementById('join-error').textContent = 'Enter a valid room code.'; return; }
+  document.getElementById('join-error').textContent = '';
+  document.getElementById('join-btn').disabled = true;
+  document.getElementById('join-btn').textContent = 'Connecting…';
+
+  isHost = false;
+  closeRTC();
+
+  connectSignaling(() => {
+    sigSend({ type: 'join', code });
+  });
+}
+
+function closeRTC() {
+  if (dataChannel) { try { dataChannel.close(); } catch(e){} dataChannel = null; }
+  if (rtcConn) { try { rtcConn.close(); } catch(e){} rtcConn = null; }
+}
+
+// ===================== GAME MESSAGES (over WebRTC) =====================
+function handleGameMessage(msg) {
+  if (msg.type === 'move') {
+    applyMove(msg, false);
+  } else if (msg.type === 'rematch') {
+    rematchVote = true;
+    document.getElementById('result-text').textContent += ' (rematch accepted)';
+    setTimeout(() => {
+      const newRole = myRole === 'X' ? 'O' : 'X';
+      send({ type: 'start', role: myRole, game: selectedGame });
+      startGame(newRole, selectedGame);
+    }, 300);
+  } else if (msg.type === 'start') {
+    startGame(msg.role, msg.game);
+  }
+}
+
+function startGame(role, game) {
+  myRole = role;
+  selectedGame = game;
+  gameOver = false;
+  rematchVote = false;
+  document.getElementById('result-area').style.display = 'none';
+
+  const titles = { ttt: 'Tic-Tac-Toe', gomoku: 'Gomoku', uttt: 'Ultimate Tic-Tac-Toe' };
+  document.getElementById('game-title-label').textContent = titles[game];
+
+  document.getElementById('badge-x-role').textContent = role === 'X' ? 'You' : 'Opponent';
+  document.getElementById('badge-o-role').textContent = role === 'O' ? 'You' : 'Opponent';
+
+  ['ttt-area','gomoku-area','uttt-area'].forEach(id => document.getElementById(id).style.display = 'none');
+
+  if (game === 'ttt') { document.getElementById('ttt-area').style.display = 'block'; initTTT(); }
+  if (game === 'gomoku') { document.getElementById('gomoku-area').style.display = 'block'; initGomoku(); }
+  if (game === 'uttt') { document.getElementById('uttt-area').style.display = 'block'; initUTTT(); }
+
+  show('game-screen');
+  updateTurn('X');
+
+  if (role === 'X') {
+    send({ type: 'start', role: 'O', game: game });
+  }
+}
+
+function updateTurn(turn) {
+  const mine = turn === myRole;
+  const ti = document.getElementById('turn-indicator');
+  const mark = turn === 'X' ? '✕' : '○';
+  const cls = turn === 'X' ? 'x-mark' : 'o-mark';
+  ti.innerHTML = `<span class="${cls}">${mark}</span> ${mine ? "Your turn" : "Opponent's turn"}`;
+
+  document.getElementById('badge-x').classList.toggle('active-badge', turn === 'X');
+  document.getElementById('badge-o').classList.toggle('active-badge', turn === 'O');
+  document.getElementById('game-status').textContent = '';
+}
+
+function showResult(text) {
+  gameOver = true;
+  document.getElementById('result-text').textContent = text;
+  document.getElementById('result-area').style.display = 'block';
+  document.getElementById('turn-indicator').textContent = '—';
+}
+
+function requestRematch() {
+  if (rematchVote) return;
+  send({ type: 'rematch' });
+  document.getElementById('rematch-btn').textContent = 'Waiting…';
+  document.getElementById('rematch-btn').disabled = true;
+  rematchVote = true;
+}
+
+function leaveGame() {
+  closeRTC();
+  if (sigWs) { try { sigWs.close(); } catch(e){} sigWs = null; }
+
+  myRole = null;
+  document.getElementById('host-code').innerHTML = '<span class="spinner"></span>generating...';
+  document.getElementById('host-status').textContent = 'Connecting to server…';
+  document.getElementById('host-game-picker').style.display = 'none';
+  document.getElementById('join-code-input').value = '';
+  document.getElementById('join-btn').disabled = false;
+  document.getElementById('join-btn').textContent = 'Connect';
+  document.getElementById('join-error').textContent = '';
+  document.querySelector('#join-panel .card').style.display = '';
+  document.getElementById('join-waiting').style.display = 'none';
+  selectMode('host', document.querySelector('.mode-btn[data-mode="host"]'));
+  show('lobby-screen');
+  setTimeout(initHost, 100);
+}
+
+// ===================== CLASSIC TTT =====================
+let tttState, tttTurn;
+
+function initTTT() {
+  tttState = Array(9).fill(null);
+  tttTurn = 'X';
+  renderTTT([]);
+}
+
+function renderTTT(winCells) {
+  const grid = document.getElementById('ttt-grid');
+  grid.innerHTML = '';
+  tttState.forEach((v, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'ttt-cell' + (v ? ' filled ' + (v === 'X' ? 'x-cell' : 'o-cell') : '') + (winCells.includes(i) ? ' win-cell' : '');
+    cell.textContent = v === 'X' ? '✕' : v === 'O' ? '○' : '';
+    cell.onclick = () => {
+      if (!v && tttTurn === myRole && !gameOver) {
+        doTTTMove(i);
+        send({ type: 'move', game: 'ttt', index: i });
+      }
+    };
+    grid.appendChild(cell);
+  });
+}
+
+function doTTTMove(index, fromRemote = false) {
+  if (tttState[index] || gameOver) return;
+  tttState[index] = tttTurn;
+  const win = checkTTTWin(tttState);
+  renderTTT(win ? win.cells : []);
+  if (win) {
+    showResult(win.player === myRole ? 'You win! 🎉' : 'You lose.');
+  } else if (tttState.every(v => v)) {
+    showResult('Draw.');
+  } else {
+    tttTurn = tttTurn === 'X' ? 'O' : 'X';
+    updateTurn(tttTurn);
+  }
+}
+
+function applyMove(msg, fromRemote = true) {
+  if (msg.game === 'ttt') { doTTTMove(msg.index, true); }
+  if (msg.game === 'gomoku') { doGomokuMove(msg.row, msg.col, true); }
+  if (msg.game === 'uttt') { doUTTTMove(msg.board, msg.cell, true); }
+}
+
+function checkTTTWin(state) {
+  const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  for (const [a,b,c] of lines) {
+    if (state[a] && state[a] === state[b] && state[a] === state[c])
+      return { player: state[a], cells: [a,b,c] };
+  }
+  return null;
+}
+
+// ===================== GOMOKU =====================
+const GSIZE = 15, CELL = 30, PAD = 20;
+let goState, goTurn, goCanvas, goCtx;
+
+function initGomoku() {
+  goState = Array.from({ length: GSIZE }, () => Array(GSIZE).fill(null));
+  goTurn = 'X';
+  goCanvas = document.getElementById('gomoku-canvas');
+  goCtx = goCanvas.getContext('2d');
+  const sz = CELL * (GSIZE - 1) + PAD * 2;
+  goCanvas.width = sz; goCanvas.height = sz;
+  goCanvas.onclick = onGomokuClick;
+  drawGomoku();
+}
+
+function drawGomoku() {
+  const ctx = goCtx;
+  const sz = goCanvas.width;
+  ctx.clearRect(0, 0, sz, sz);
+  ctx.fillStyle = '#f9f6ed';
+  ctx.fillRect(0, 0, sz, sz);
+
+  ctx.strokeStyle = '#ccc8b8';
+  ctx.lineWidth = 0.8;
+  for (let i = 0; i < GSIZE; i++) {
+    const x = PAD + i * CELL, y = PAD + i * CELL;
+    ctx.beginPath(); ctx.moveTo(x, PAD); ctx.lineTo(x, PAD + (GSIZE-1)*CELL); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(PAD + (GSIZE-1)*CELL, y); ctx.stroke();
+  }
+
+  const dots = [[3,3],[3,11],[7,7],[11,3],[11,11]];
+  dots.forEach(([r,c]) => {
+    ctx.beginPath();
+    ctx.arc(PAD + c*CELL, PAD + r*CELL, 3, 0, Math.PI*2);
+    ctx.fillStyle = '#bbb8a8'; ctx.fill();
+  });
+
+  for (let r = 0; r < GSIZE; r++) {
+    for (let c = 0; c < GSIZE; c++) {
+      if (!goState[r][c]) continue;
+      const cx = PAD + c*CELL, cy = PAD + r*CELL;
+      ctx.beginPath();
+      ctx.arc(cx, cy, CELL*0.42, 0, Math.PI*2);
+      if (goState[r][c] === 'X') {
+        ctx.fillStyle = '#1a1917';
+      } else {
+        ctx.fillStyle = '#f5f4f0';
+        ctx.strokeStyle = '#888';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      ctx.fill();
+    }
+  }
+}
+
+function onGomokuClick(e) {
+  if (goTurn !== myRole || gameOver) return;
+  const rect = goCanvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const scaleX = goCanvas.width / rect.width, scaleY = goCanvas.height / rect.height;
+  const px = mx * scaleX, py = my * scaleY;
+  const col = Math.round((px - PAD) / CELL);
+  const row = Math.round((py - PAD) / CELL);
+  if (row < 0 || row >= GSIZE || col < 0 || col >= GSIZE) return;
+  if (goState[row][col]) return;
+  doGomokuMove(row, col);
+  send({ type: 'move', game: 'gomoku', row, col });
+}
+
+function doGomokuMove(row, col, fromRemote = false) {
+  if (goState[row][col] || gameOver) return;
+  goState[row][col] = goTurn;
+  drawGomoku();
+  if (checkGomokuWin(row, col, goTurn)) {
+    showResult(goTurn === myRole ? 'You win! 🎉' : 'You lose.');
+  } else {
+    goTurn = goTurn === 'X' ? 'O' : 'X';
+    updateTurn(goTurn);
+  }
+}
+
+function checkGomokuWin(r, c, player) {
+  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+  for (const [dr,dc] of dirs) {
+    let count = 1;
+    for (let d = 1; d < 5; d++) { const nr=r+dr*d, nc=c+dc*d; if (nr<0||nr>=GSIZE||nc<0||nc>=GSIZE||goState[nr][nc]!==player) break; count++; }
+    for (let d = 1; d < 5; d++) { const nr=r-dr*d, nc=c-dc*d; if (nr<0||nr>=GSIZE||nc<0||nc>=GSIZE||goState[nr][nc]!==player) break; count++; }
+    if (count >= 5) return true;
+  }
+  return false;
+}
+
+// ===================== ULTIMATE TTT =====================
+let utttBoards, utttWins, utttTurn, utttNextBoard;
+
+function initUTTT() {
+  utttBoards = Array.from({length:9}, () => Array(9).fill(null));
+  utttWins = Array(9).fill(null);
+  utttTurn = 'X';
+  utttNextBoard = null;
+  renderUTTT();
+}
+
+function renderUTTT() {
+  const grid = document.getElementById('uttt-grid');
+  grid.innerHTML = '';
+  for (let b = 0; b < 9; b++) {
+    const board = document.createElement('div');
+    board.className = 'uttt-board';
+
+    const isActive = !gameOver && (utttNextBoard === null || utttNextBoard === b) && !utttWins[b];
+    if (isActive && !gameOver) board.classList.add('active-board');
+    if (utttWins[b] === 'X') board.classList.add('won-x');
+    if (utttWins[b] === 'O') board.classList.add('won-o');
+    if (utttWins[b] === 'D') board.classList.add('drawn');
+
+    if (utttWins[b] && utttWins[b] !== 'D') {
+      board.innerHTML = `<div class="uttt-board-won-symbol ${utttWins[b]==='X'?'x-cell':'o-cell'}">${utttWins[b]==='X'?'✕':'○'}</div>`;
+    } else {
+      const inner = document.createElement('div');
+      inner.className = 'uttt-inner';
+      for (let c = 0; c < 9; c++) {
+        const cell = document.createElement('div');
+        const v = utttBoards[b][c];
+        const locked = !!utttWins[b] || (!isActive);
+        cell.className = 'uttt-cell' + (v ? ' filled ' + (v==='X'?'x-cell':'o-cell') : '') + (locked ? ' locked' : '');
+        cell.textContent = v === 'X' ? '✕' : v === 'O' ? '○' : '';
+        cell.onclick = () => {
+          if (!v && !locked && utttTurn === myRole && !gameOver) {
+            doUTTTMove(b, c);
+            send({ type: 'move', game: 'uttt', board: b, cell: c });
+          }
+        };
+        inner.appendChild(cell);
+      }
+      board.appendChild(inner);
+    }
+    grid.appendChild(board);
+  }
+}
+
+function doUTTTMove(b, c, fromRemote = false) {
+  if (utttBoards[b][c] || utttWins[b] || gameOver) return;
+  const nb = utttNextBoard;
+  if (nb !== null && nb !== b) return;
+
+  utttBoards[b][c] = utttTurn;
+
+  const bWin = checkTTTWin(utttBoards[b]);
+  if (bWin) {
+    utttWins[b] = bWin.player;
+  } else if (utttBoards[b].every(v => v)) {
+    utttWins[b] = 'D';
+  }
+
+  const metaWin = checkTTTWin(utttWins.map(w => w === 'X' || w === 'O' ? w : null));
+  if (metaWin) {
+    renderUTTT();
+    showResult(metaWin.player === myRole ? 'You win! 🎉' : 'You lose.');
+    return;
+  }
+  if (utttWins.every(w => w)) {
+    renderUTTT();
+    showResult('Draw.');
+    return;
+  }
+
+  utttNextBoard = utttWins[c] ? null : c;
+  utttTurn = utttTurn === 'X' ? 'O' : 'X';
+  renderUTTT();
+  updateTurn(utttTurn);
+}
+
+// ===================== INIT =====================
+initHost();
+</script>
+</body>
+</html>
